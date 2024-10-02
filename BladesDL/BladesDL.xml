@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xex>
+  <baseaddr addr="0x91F00000"/>
+  <sysdll/>
+  <format>
+    <compressed/>
+  </format>
+  <mediatypes>
+    <flash/>
+  </mediatypes>
+  <gameregion>
+    <all/>
+  </gameregion>
+  <mfgmode mode = "aware"/>
+  <version major="0x02" minor="0x00" build="0x1A72" qfe="0x00"/>
+  <!-- <exportcontainer name="Exports.def"/> -->
+</xex>
