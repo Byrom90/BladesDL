@@ -5,33 +5,9 @@
 //		Will toggle the Mem protection on/off to prevent the crash
 //=============================================================================================================================================
 #pragma region OGXFix
-#define XBOX_XEX		"\\Device\\Harddisk0\\SystemPartition\\Compatibility"
-#define DASH_XEX		"\\SystemRoot\\dash.xex"
-
-#define LoaderPrep_Addr_6670	0x818DA950 // TitleLoaderPrepareLoadExecutableFile
-
-#define LOADPREPSAVE_VAL	1
-typedef DWORD(*LOADPREPSAVEFUN)(DWORD argR3, char* xex, DWORD argR5, PVOID handle, DWORD typeinfo, DWORD ver, DWORD argR9, DWORD argR10, DWORD argSt1);
-VOID __declspec(naked) loadPrepSaveVar(VOID)
+void toggleMemProtection(char * xex)
 {
-	__asm {
-		li r3, LOADPREPSAVE_VAL
-		nop
-		nop
-		nop
-		nop
-		nop
-		nop
-		blr
-	}
-}
-LOADPREPSAVEFUN loadPrepSave = (LOADPREPSAVEFUN)loadPrepSaveVar;
-
-DWORD LoaderPrepHook(DWORD argR3, const char* xex, DWORD argR5, PVOID handle, DWORD typeinfo, DWORD ver, DWORD argR9, DWORD argR10, DWORD argSt1)
-{
-	char* xexname = (char*)xex;
-	//DbgPrint("loadPrep r3: %08x r4:'%s' r5: %08x hand: %08x typ: %08x ver: %08x r9: %08x r10: %08x st1: %08x\n", argR3, xexname, argR5, handle, typeinfo, ver, argR9, argR10, argSt1);
-	if (strncmp(xexname, XBOX_XEX, strlen(XBOX_XEX)) == 0)
+	if (strncmp(xex, XBOX_XEX, strlen(XBOX_XEX)) == 0)
 	{
 		//HvxSetState(SET_PROT_ON);
 		HvxGetVersions(FREEBOOT_SYSCALL_KEY, SET_PROT_ON);
@@ -50,16 +26,60 @@ DWORD LoaderPrepHook(DWORD argR3, const char* xex, DWORD argR5, PVOID handle, DW
 			__sync();
 		}
 	}
-	return loadPrepSave(argR3, xexname, argR5, handle, typeinfo, ver, argR9, argR10, argSt1);
 }
 
-VOID SetupLoaderPrepHook()
+VOID __declspec(naked) MemProtToggleSaveVar(VOID)
 {
+	__asm{
+		li r3, MEM_PROT_TOGGLE_VAL
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		blr
+	}
+}
 
-	//Byrom_Dbg("[HOOK] Applying LoaderPrep Hook...");
-	cprintf("[BladesDL] [HOOK] Applying LoaderPrep Hook...");
+typedef NTSTATUS (*XEXPLOADIMAGEFUN)(LPCSTR xexName, DWORD typeInfo, DWORD ver, PHANDLE modHandle); // XexpLoadImage
+XEXPLOADIMAGEFUN XexpLoadImageSave = (XEXPLOADIMAGEFUN)MemProtToggleSaveVar;
+
+NTSTATUS XexpLoadImageHook(LPCSTR xex, DWORD typeInfo, DWORD ver, PHANDLE modHandle)
+{
+   toggleMemProtection((char *)xex);
+
+   return XexpLoadImageSave(xex, typeInfo, ver, modHandle);
+}
+
+typedef DWORD(*LOADPREPSAVEFUN)(DWORD argR3, char* xex, DWORD argR5, PVOID handle, DWORD typeinfo, DWORD ver, DWORD argR9, DWORD argR10, DWORD argSt1);
+LOADPREPSAVEFUN loadPrepSave = (LOADPREPSAVEFUN)MemProtToggleSaveVar;
+
+DWORD LoaderPrepHook(DWORD argR3, const char* xex, DWORD argR5, PVOID handle, DWORD typeinfo, DWORD ver, DWORD argR9, DWORD argR10, DWORD argSt1)
+{
+	//DbgPrint("loadPrep r3: %08x r4:'%s' r5: %08x hand: %08x typ: %08x ver: %08x r9: %08x r10: %08x st1: %08x\n", argR3, xexname, argR5, handle, typeinfo, ver, argR9, argR10, argSt1);
+	toggleMemProtection((char*)xex);
+
+	return loadPrepSave(argR3, (char *)xex, argR5, handle, typeinfo, ver, argR9, argR10, argSt1);
+}
+
+VOID SetupMemoryProtectionToggleHook()
+{
 	// using this to catch dash.xex and xbox emu loading
-	hookFunctionStart((PDWORD)LoaderPrep_Addr_6670, (PDWORD)loadPrepSave, (DWORD)LoaderPrepHook);
+	if(XboxKrnlVersion->Build == 1888)
+	{
+		cprintf("[BladesDL] [HOOK] Applying XexpLoadImage Hook...");
+		hookFunctionStart((PDWORD)KERNEL_XEXP_LOAD_IMAGE_ADDR_1888, (PDWORD)XexpLoadImageSave, (DWORD)XexpLoadImageHook);
+	}
+	else if(XboxKrnlVersion->Build == 6770)
+	{
+		cprintf("[BladesDL] [HOOK] Applying LoaderPrep Hook...");
+		hookFunctionStart((PDWORD)XAM_LOADERPREP_ADDR_6670, (PDWORD)loadPrepSave, (DWORD)LoaderPrepHook);
+	}
+	else
+	{
+		cprintf("[BladesDL] [HOOK] Unsupported kernel: %d, skipping memory protection toggle hook", XboxKrnlVersion->Build);
+	}
 }
 #pragma endregion
 //=============================================================================================================================================
@@ -69,8 +89,6 @@ VOID SetupLoaderPrepHook()
 //		NetDll_XNetDnsLookup Hook
 //=============================================================================================================================================
 #pragma region LiveBlock
-#define NetDll_XNetDnsLookup_ORD 67
-#define DNSLOOKUPSAVE_VAL	2
 typedef DWORD(*DNSLOOKUPSAVEFUN)(XNCALLER_TYPE xnc, const char* pszHost, WSAEVENT hEvent, XNDNS** ppxndns);
 VOID __declspec(naked) DnsLookupSaveVar(VOID)
 {
@@ -131,7 +149,6 @@ VOID SetupDNSHook()
 //		Always allows executables to use insecure sockets
 //=============================================================================================================================================
 #pragma region Sockpatch
-#define XexCheckExecPriv_ORD	404 // 0x194
 BOOL XamCheckExecPriv(DWORD priv)
 {
 	BOOL ret = XexCheckExecutablePrivilege(priv);
@@ -155,9 +172,6 @@ VOID SetupXamCheckExecPrivHook()
 //		Reboot on crashes instead of freeze - UNTESTED
 //=============================================================================================================================================
 #pragma region FatalReboot
-#define keBugCheckEx_ORD	83
-#define KEBUGCHECKEXSAVE_VAL	3
-
 typedef VOID(*KEBUGCHECKEXFUN)(DWORD r3, DWORD r4, DWORD r5, DWORD r6, DWORD r7);
 
 #define HAL_HARD_REBOOT			2

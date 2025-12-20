@@ -29,12 +29,26 @@ VOID PatchUpdStrings(VOID)
 
 
 // Ping Patch - NOP the jump for when ping exceeds 30
-#define PING_PATCH_ADDR_6770 0x81947D38
 VOID ApplyPingPatch()
 {
+	PDWORD ptr = NULL;
+
 	cprintf("[BladesDL] [PingPatch] Removing ping limit for system link play");
-	//*(DWORD*)PING_PATCH_ADDR_6770 = 0x60000000;
-	PDWORD ptr = (PDWORD)PING_PATCH_ADDR_6770;
+
+	if(XboxKrnlVersion->Build == 1888)
+	{
+		ptr = (PDWORD)PING_PATCH_ADDR_1888;
+	}
+	else if(XboxKrnlVersion->Build == 6770)
+	{
+		ptr = (PDWORD)PING_PATCH_ADDR_6770;
+	}
+	else
+	{
+		cprintf("[BladesDL] [PingPatch] Unsupported kernel: %d", XboxKrnlVersion->Build);
+		return;
+	}
+
 	ptr[0] = 0x60000000;
 	doSync(ptr);
 }

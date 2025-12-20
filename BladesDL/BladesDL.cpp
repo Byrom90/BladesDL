@@ -1,6 +1,6 @@
 //===============================================================================================================================================
 //
-//		BladesDL - A basic Dashlaunch substitute for Blades kernel (6770). Performs some of the basic tasks Dashlaunch would normally provide.
+//		BladesDL - A basic Dashlaunch substitute for Blades kernel (6770 and 1888). Performs some of the basic tasks Dashlaunch would normally provide.
 //
 // Created by Byrom - https://github.com/Byrom90
 //
@@ -21,7 +21,7 @@ BOOL WINAPI DllMain(HANDLE hInstDLL, DWORD fdwReason, LPVOID lpReserved)
 	case DLL_PROCESS_ATTACH:
 		cprintf("[BladesDL] Loaded!");
 		SetupDNSHook();
-		SetupLoaderPrepHook();
+		SetupMemoryProtectionToggleHook();
 		SetupkeBugCheckExHook();
 		SetupXamCheckExecPrivHook();
 		PatchUpdStrings();
